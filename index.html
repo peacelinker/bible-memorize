@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>성구 암송 프로그램 (개역한글)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Noto Sans KR) -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght=300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* 터치 기기에서 버튼이 뭉개지지 않도록 방지 */
+        button, textarea {
+            touch-action: manipulation;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- 1. 비밀번호 입력 화면 (0314) -->
+    <div id="login-screen" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center">
+            <div class="inline-flex p-3 bg-indigo-100 rounded-full text-indigo-600 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+            </div>
+            <h1 class="text-xl font-bold text-gray-800 mb-2">성구 암송 프로그램</h1>
+            <p class="text-sm text-gray-500 mb-6">보안 비밀번호를 입력해주세요.</p>
+            
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <input 
+                    type="password" 
+                    id="password-input" 
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="비밀번호 입력" 
+                    class="w-full px-4 py-3 border border-gray-300 rounded-xl text-center text-xl tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4"
+                    autocomplete="off"
+                    required
+                >
+                <button 
+                    type="submit" 
+                    class="w-full bg-indigo-600 text-white font-medium py-3 rounded-xl hover:bg-indigo-700 transition active:scale-[0.98]"
+                >
+                    확인
+                </button>
+            </form>
+            <p id="login-error" class="text-red-500 text-sm mt-3 hidden">비밀번호가 일치하지 않습니다.</p>
+        </div>
+    </div>
+
+    <!-- 2. 메인 애플리케이션 화면 -->
+    <div id="app-screen" class="hidden flex-1 flex flex-col">
+        <!-- 상단 헤더 -->
+        <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-10">
+            <div class="max-w-md mx-auto px-4 py-4 flex justify-between items-center">
+                <h1 class="text-lg font-bold flex items-center gap-2">
+                    📖 성구 암송 (개역한글)
+                </h1>
+                <button 
+                    onclick="logout()" 
+                    class="text-xs bg-indigo-800 hover:bg-indigo-900 px-3 py-1.5 rounded-lg transition"
+                >
+                    잠금
+                </button>
+            </div>
+        </header>
+
+        <!-- 본문 영역 (모바일 최적화 레이아웃) -->
+        <main class="flex-1 max-w-md w-full mx-auto p-4 flex flex-col gap-4">
+            
+            <!-- 성구 선택기 -->
+            <div class="bg-white rounded-xl p-4 shadow-sm">
+                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">암송 구절 선택</label>
+                <div class="relative">
+                    <select id="passage-select" onchange="changePassage()" class="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer">
+                        <!-- 성구 목록이 JS로 들어갑니다 -->
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                        </svg>
+                    </div>
+                </div>
+                
+                <!-- 구절 내 세부 주소 탭 -->
+                <div id="sub-passage-tabs" class="flex flex-wrap gap-2 mt-3">
+                    <!-- 하위 절 탭들이 동적 생성됩니다 -->
+                </div>
+            </div>
+
+            <!-- 원본 성구 보기 & 힌트 제어 -->
+            <div class="bg-white rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">가이드 및 힌트</span>
+                    <div class="flex gap-1.5">
+                        <button onclick="toggleHint('show')" id="btn-hint-show" class="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 transition">전체보기</button>
+                        <button onclick="toggleHint('initial')" id="btn-hint-initial" class="text-xs px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition">초성보기</button>
+                        <button onclick="toggleHint('hide')" id="btn-hint-hide" class="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 transition font-bold">숨기기</button>
+                    </div>
+                </div>
+
+                <!-- 힌트가 출력되는 공간 -->
+                <div id="guide-box" class="p-3 bg-slate-50 border border-slate-100 rounded-xl min-h-[4.5rem] flex items-center justify-center text-center">
+                    <p id="guide-text" class="text-gray-700 font-medium leading-relaxed select-none break-all"></p>
+                </div>
+            </div>
+
+            <!-- 실시간 타이핑 비교 영역 -->
+            <div class="bg-white rounded-xl p-4 shadow-sm flex flex-col gap-3 flex-1">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">실시간 비교 결과 (띄어쓰기 무관)</span>
+                    <span id="match-status" class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">작성 중...</span>
+                </div>
+
+                <!-- 실시간 글자 색상 피드백 화면 -->
+                <div id="comparison-display" class="p-4 bg-gray-50 border border-gray-100 rounded-xl min-h-[6rem] max-h-[12rem] overflow-y-auto text-base leading-relaxed break-words whitespace-pre-wrap select-none font-medium">
+                    <!-- 오직 사용자가 친 글자만 분석하여 보여주며, 아직 치지 않은 뒷부분은 철저히 가려집니다 -->
+                    <span class="text-gray-400">아래에 입력을 시작해 주세요.</span>
+                </div>
+
+                <!-- 텍스트 입력창 -->
+                <div class="flex-1 flex flex-col">
+                    <textarea 
+                        id="user-input" 
+                        oninput="compareText()"
+                        placeholder="이곳에 성구를 한 글자씩 타이핑하세요..." 
+                        class="w-full flex-1 p-4 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-base leading-relaxed bg-white"
+                        autocomplete="off"
+                        autocorrect="off"
+                        autocapitalize="none"
+                        spellcheck="false"
+                    ></textarea>
+                </div>
+
+                <!-- 초기화 버튼 -->
+                <div class="flex gap-2">
+                    <button 
+                        onclick="clearInput()" 
+                        class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 rounded-xl transition active:scale-[0.98] text-sm"
+                    >
+                        지우고 다시 쓰기
+                    </button>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- 카피라이트 & 푸터 -->
+        <footer class="bg-white border-t border-gray-100 py-3 text-center text-xs text-gray-400">
+            개역한글 성경암송 프로그램 • 모바일 지원
+        </footer>
+    </div>
+
+    <!-- 성공 축하 모달 (각 절 완성 시) -->
+    <div id="success-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white w-full max-w-xs rounded-2xl shadow-2xl p-6 text-center animate-bounce-short">
+            <div class="inline-flex p-3 bg-emerald-100 rounded-full text-emerald-600 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800 mb-1">참 잘하셨습니다!</h3>
+            <p class="text-sm text-gray-500 mb-5">성구를 틀림없이 완벽하게 암송하셨습니다.</p>
+            <button 
+                onclick="closeSuccessModal()" 
+                class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2.5 rounded-xl transition"
+            >
+                다음 구절 도전하기
+            </button>
+        </div>
+    </div>
+
+    <!-- 최종 완독 축하 모달 (모든 성구 완료 시) -->
+    <div id="complete-all-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center">
+            <div class="inline-flex p-3 bg-amber-100 rounded-full text-amber-600 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-800 mb-2">🎉 전 구절 완주 성공!</h3>
+            <p class="text-sm text-gray-600 leading-relaxed mb-6">
+                수록된 모든 계시록 성구 암송을 완주하셨습니다!<br>
+                대단히 훌륭합니다. 처음부터 다시 복습해볼까요?
+            </p>
+            <button 
+                onclick="restartFromBeginning()" 
+                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-xl transition"
+            >
+                첫 구절부터 다시 복습하기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 성경 성구 데이터 (개역한글)
+        const BIBLE_DATA = {
+            "계 1:1-3": [
+                {
+                    ref: "계 1:1",
+                    text: "예수 그리스도의 계시라 이는 하나님이 그에게 주사 반드시 속히 될 일을 그 종들에게 보이시려고 그 천사를 그 종 요한에게 보내어 지시하신 것이라"
+                },
+                {
+                    ref: "계 1:2",
+                    text: "요한은 하나님의 말씀과 예수 그리스도의 증거 곧 자기의 본 것을 다 증거하였느니라"
+                },
+                {
+                    ref: "계 1:3",
+                    text: "이 예언의 말씀을 읽는 자와 듣는 자들과 그 가운데 기록한 것을 지키는 자들이 복이 있나니 때가 가까움이라"
+                }
+            ],
+            "계 7:1-4": [
+                {
+                    ref: "계 7:1",
+                    text: "이 일 후에 내가 네 천사가 땅 네 모퉁이에 선 것을 보니 땅의 사방의 바람을 붙잡아 바람으로 하여금 땅에나 바다에나 각종 나무에 불지 못하게 하더라"
+                },
+                {
+                    ref: "계 7:2",
+                    text: "또 보매 다른 천사가 살아 계신 하나님의 인을 가지고 해 돋는 데로부터 올라와서 땅과 바다를 해롭게 할 권세를 얻은 네 천사를 향하여 큰 소리로 외쳐"
+                },
+                {
+                    ref: "계 7:3",
+                    text: "가로되 우리가 우리 하나님의 종들의 이마에 인치기까지 땅이나 바다나 나무들을 해하지 말라 하더라"
+                },
+                {
+                    ref: "계 7:4",
+                    text: "내가 인맞은 자의 수를 들으니 이스라엘 자손의 각 지파 중에서 인맞은 자들이 십 사만 사천이니"
+                }
+            ],
+            "계 10:10-11": [
+                {
+                    ref: "계 10:10",
+                    text: "내가 천사의 손에서 작은 책을 갖다 먹어버리니 내 입에는 꿀 같이 다나 먹은 후에 내 배에서는 쓰게 되더라"
+                },
+                {
+                    ref: "계 10:11",
+                    text: "저가 내게 말하기를 네가 많은 백성과 나라와 방언과 임금에게 다시 예언하여야 하리라 하더라"
+                }
+            ],
+            "계 20:4-6": [
+                {
+                    ref: "계 20:4",
+                    text: "또 내가 보좌들을 보니 거기 앉은 자들이 있어 심판하는 권세를 받았더라 또 내가 보니 예수의 증거와 하나님의 말씀을 인하여 목 베임을 받은 자의 영혼들과 또 짐승과 그의 우상에게 경배하지도 아니하고 이마와 손에 그의 표를 받지도 아니한 자들이 살아서 그리스도로 더불어 천년 동안 왕노릇 하니"
+                },
+                {
+                    ref: "계 20:5",
+                    text: "（그 나머지 죽은 자들은 그 천년이 차기까지 살지 못하더라） 이는 첫째 부활이라"
+                },
+                {
+                    ref: "계 20:6",
+                    text: "이 첫째 부활에 참예하는 자들은 복이 있고 거룩하도다 둘째 사망이 그들을 다스리는 권세가 없고 도리어 그들이 하나님과 그리스도의 제사장이 되어 천년 동안 그리스도로 더불어 왕노릇 하리라"
+                }
+            ],
+            "계 22:18-19": [
+                {
+                    ref: "계 22:18",
+                    text: "내가 이 책의 예언의 말씀을 듣는 각인에게 증거하노니 만일 누구든지 이것들 외에 더하면 하나님이 이 책에 기록된 재앙들을 그에게 더하실 터이요"
+                },
+                {
+                    ref: "계 22:19",
+                    text: "만일 누구든지 이 책의 예언의 말씀에서 제하여 버리면 하나님이 이 책에 기록된 생명나무와 및 거룩한 성에 참예함을 제하여 버리시리라"
+                }
+            ]
+        };
+
+        // 앱 상태 관리 변수
+        let currentGroupKey = "계 1:1-3";
+        let currentSubIndex = 0;
+        let currentTargetText = "";
+        let hintMode = "show";
+
+        // 비밀번호 체크
+        function handleLogin(event) {
+            event.preventDefault();
+            const passwordInput = document.getElementById("password-input").value;
+            const loginError = document.getElementById("login-error");
+
+            if (passwordInput === "0314") {
+                document.getElementById("login-screen").classList.add("hidden");
+                document.getElementById("app-screen").classList.remove("hidden");
+                initApp();
+            } else {
+                loginError.classList.remove("hidden");
+                document.getElementById("password-input").value = "";
+                document.getElementById("password-input").focus();
+            }
+        }
+
+        // 비밀번호 초기화 및 다시 잠금
+        function logout() {
+            document.getElementById("password-input").value = "";
+            document.getElementById("login-error").classList.add("hidden");
+            document.getElementById("login-screen").classList.remove("hidden");
+            document.getElementById("app-screen").classList.add("hidden");
+        }
+
+        // 앱 초기화
+        function initApp() {
+            const selectEl = document.getElementById("passage-select");
+            selectEl.innerHTML = "";
+
+            Object.keys(BIBLE_DATA).forEach(key => {
+                const opt = document.createElement("option");
+                opt.value = key;
+                opt.textContent = key;
+                selectEl.appendChild(opt);
+            });
+
+            currentGroupKey = Object.keys(BIBLE_DATA)[0];
+            currentSubIndex = 0;
+            
+            loadPassage();
+        }
+
+        // 대그룹 성구 변경
+        function changePassage() {
+            currentGroupKey = document.getElementById("passage-select").value;
+            currentSubIndex = 0;
+            loadPassage();
+        }
+
+        // 특정 성구(절) 로드 및 UI 랜더링
+        function loadPassage() {
+            const passages = BIBLE_DATA[currentGroupKey];
+            const currentSubPassage = passages[currentSubIndex];
+            currentTargetText = currentSubPassage.text;
+
+            // 하위 탭 새로 그리기
+            const tabsContainer = document.getElementById("sub-passage-tabs");
+            tabsContainer.innerHTML = "";
+            
+            passages.forEach((p, idx) => {
+                const btn = document.createElement("button");
+                btn.textContent = p.ref;
+                btn.className = `px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    idx === currentSubIndex 
+                    ? "bg-indigo-600 text-white shadow-sm" 
+                    : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                }`;
+                btn.onclick = () => {
+                    currentSubIndex = idx;
+                    loadPassage();
+                };
+                tabsContainer.appendChild(btn);
+            });
+
+            clearInput();
+            updateGuide();
+        }
+
+        // 힌트 모드 제어
+        function toggleHint(mode) {
+            hintMode = mode;
+            
+            document.getElementById("btn-hint-show").className = `text-xs px-2.5 py-1 rounded transition ${mode === 'show' ? 'bg-indigo-600 text-white font-semibold' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`;
+            document.getElementById("btn-hint-initial").className = `text-xs px-2.5 py-1 rounded transition ${mode === 'initial' ? 'bg-indigo-600 text-white font-semibold' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`;
+            document.getElementById("btn-hint-hide").className = `text-xs px-2.5 py-1 rounded transition ${mode === 'hide' ? 'bg-indigo-600 text-white font-semibold' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`;
+
+            updateGuide();
+        }
+
+        // 가이드 내용 업데이트
+        function updateGuide() {
+            const text = currentTargetText;
+            const guideTextEl = document.getElementById("guide-text");
+
+            if (hintMode === "show") {
+                guideTextEl.textContent = text;
+                guideTextEl.classList.remove("text-gray-300");
+                guideTextEl.classList.add("text-gray-700");
+            } else if (hintMode === "initial") {
+                guideTextEl.textContent = getKoreanInitials(text);
+                guideTextEl.classList.remove("text-gray-300");
+                guideTextEl.classList.add("text-indigo-600", "tracking-wider");
+            } else {
+                guideTextEl.textContent = "눈을 감고 머릿속으로 그리며 적어보세요!";
+                guideTextEl.classList.add("text-gray-300");
+                guideTextEl.classList.remove("text-gray-700", "text-indigo-600");
+            }
+        }
+
+        // 한글 초성 추출 알고리즘
+        function getKoreanInitials(text) {
+            const initials = [
+                'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 
+                'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
+            ];
+            
+            let result = "";
+            for (let i = 0; i < text.length; i++) {
+                const charCode = text.charCodeAt(i);
+                if (charCode >= 44032 && charCode <= 55203) {
+                    const uniVal = charCode - 44032;
+                    const key = Math.floor(uniVal / 588);
+                    result += initials[key];
+                } else {
+                    result += text.charAt(i);
+                }
+            }
+            return result;
+        }
+
+        // 글자 지우기
+        function clearInput() {
+            document.getElementById("user-input").value = "";
+            compareText();
+        }
+
+        // 입력 텍스트 실시간 검증 및 피드백 (뒷부분 회색 미리보기 완전 제거 버전)
+        function compareText() {
+            const inputVal = document.getElementById("user-input").value;
+            const targetText = currentTargetText;
+
+            const comparisonDisplay = document.getElementById("comparison-display");
+            const matchStatus = document.getElementById("match-status");
+
+            if (!inputVal) {
+                comparisonDisplay.innerHTML = `<span class="text-gray-400">성구를 보고 키보드로 입력하면 실시간으로 정답 여부가 분석됩니다. (띄어쓰기는 생략 가능)</span>`;
+                matchStatus.textContent = "작성 대기";
+                matchStatus.className = "text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600";
+                return;
+            }
+
+            const cleanTarget = targetText.replace(/\s+/g, '');
+            const cleanInput = inputVal.replace(/\s+/g, '');
+
+            let displayHTML = "";
+            let targetIdx = 0;
+            let inputIdx = 0;
+
+            let isErrorOccured = false;
+
+            // 유저가 실제로 타이핑한 글자만큼만 실시간 대조하여 렌더링합니다.
+            while (inputIdx < inputVal.length) {
+                const inputChar = inputVal[inputIdx];
+
+                // 사용자가 입력한 공백은 그대로 출력하고 통과
+                if (/\s/.test(inputChar)) {
+                    displayHTML += `<span class="text-gray-300"> </span>`;
+                    inputIdx++;
+                    continue;
+                }
+
+                if (targetIdx < targetText.length) {
+                    let nextTargetChar = targetText[targetIdx];
+
+                    // 원본 타겟의 다음 문자가 공백이면 화면에 공백만 렌더링하고 다음 오리지널 타겟 글자로 위치 이동
+                    while (/\s/.test(nextTargetChar) && targetIdx < targetText.length) {
+                        displayHTML += `<span class="text-gray-400"> </span>`;
+                        targetIdx++;
+                        if (targetIdx < targetText.length) {
+                            nextTargetChar = targetText[targetIdx];
+                        }
+                    }
+
+                    if (targetIdx < targetText.length) {
+                        if (inputChar === nextTargetChar) {
+                            // 맞은 글자는 즉시 초록색 표시
+                            displayHTML += `<span class="text-emerald-600 font-bold bg-emerald-50 px-[1px] rounded">${inputChar}</span>`;
+                        } else {
+                            // 틀린 글자는 즉시 빨간색 밑줄 표시
+                            displayHTML += `<span class="text-red-500 font-bold bg-red-50 underline px-[1px] rounded" title="원래 글자: ${nextTargetChar}">${inputChar}</span>`;
+                            isErrorOccured = true;
+                        }
+                        targetIdx++;
+                    } else {
+                        // 타겟 글자 수 초과 입력 시 에러 처리
+                        displayHTML += `<span class="text-red-500 font-bold bg-red-50 underline px-[1px] rounded">${inputChar}</span>`;
+                        isErrorOccured = true;
+                    }
+                } else {
+                    displayHTML += `<span class="text-red-500 font-bold bg-red-50 underline px-[1px] rounded">${inputChar}</span>`;
+                    isErrorOccured = true;
+                }
+                
+                inputIdx++;
+            }
+
+            comparisonDisplay.innerHTML = displayHTML;
+
+            // 정오 상태 실시간 감지
+            if (isErrorOccured) {
+                matchStatus.textContent = "오타 감지!";
+                matchStatus.className = "text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600";
+            } else {
+                if (cleanInput.length === cleanTarget.length) {
+                    matchStatus.textContent = "완벽하게 일치!";
+                    matchStatus.className = "text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700";
+                    showSuccessModal();
+                } else {
+                    matchStatus.textContent = "정상 타이핑 중...";
+                    matchStatus.className = "text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-600";
+                }
+            }
+        }
+
+        // 개별 성구 성공 모달 열기
+        function showSuccessModal() {
+            document.getElementById("success-modal").classList.remove("hidden");
+        }
+
+        // 성공 모달 닫고 다음 흐름 처리
+        function closeSuccessModal() {
+            document.getElementById("success-modal").classList.add("hidden");
+            
+            const passages = BIBLE_DATA[currentGroupKey];
+            if (currentSubIndex < passages.length - 1) {
+                // 같은 대그룹 내의 다음 절로 이동
+                currentSubIndex++;
+                loadPassage();
+            } else {
+                // 대그룹 마지막 절인 경우 다음 대그룹 체크
+                const groupKeys = Object.keys(BIBLE_DATA);
+                const currentGroupIdx = groupKeys.indexOf(currentGroupKey);
+                
+                if (currentGroupIdx < groupKeys.length - 1) {
+                    currentGroupKey = groupKeys[currentGroupIdx + 1];
+                    currentSubIndex = 0;
+                    document.getElementById("passage-select").value = currentGroupKey;
+                    loadPassage();
+                } else {
+                    // 수록된 모든 성구를 마친 경우 완독 축하 모달 오픈
+                    showCompleteAllModal();
+                }
+            }
+        }
+
+        // 전체 완독 모달 열기
+        function showCompleteAllModal() {
+            document.getElementById("complete-all-modal").classList.remove("hidden");
+        }
+
+        // 완독 모달에서 다시 시작할 때 호출
+        function restartFromBeginning() {
+            document.getElementById("complete-all-modal").classList.add("hidden");
+            const groupKeys = Object.keys(BIBLE_DATA);
+            currentGroupKey = groupKeys[0];
+            currentSubIndex = 0;
+            document.getElementById("passage-select").value = currentGroupKey;
+            loadPassage();
+        }
+    </script>
+</body>
+</html>
